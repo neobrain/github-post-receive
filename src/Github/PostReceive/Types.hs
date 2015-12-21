@@ -3,6 +3,8 @@
 
 module Github.PostReceive.Types
     ( Payload (..)
+    , IssueEvent (..)
+    , IssueCommentEvent (..)
     , PushEvent (..)
     , StatusEvent (..)
     , Commit (..)
@@ -14,6 +16,8 @@ module Github.PostReceive.Types
     , StatusCommit (..)
     , SimpleStatusCommit (..)
     , Tree (..)
+    , Comment (..)
+    , IssueData (..)
     , Url
     , HashValue
     , DateString
@@ -34,11 +38,113 @@ import Text.Email.Validate (EmailAddress, emailAddress)
 
 data Payload = Push PushEvent
              | Status StatusEvent
+             | IssueComment IssueCommentEvent
+             | Issue IssueEvent
              deriving (Show, Eq, Typeable)
 
 instance FromJSON Payload where
     parseJSON v = Push <$> parseJSON v
               <|> Status <$> parseJSON v
+              <|> IssueComment <$> parseJSON v -- NOTE: The only way to tell apart "IssueComment" from "Issue" is to have this in front, currently...
+              <|> Issue <$> parseJSON v
+
+data IssueCommentEvent = IssueCommentEvent
+    { issueCommentEventAction :: Text
+    , issueCommentEventIssue :: IssueData
+    , issueCommentEventComment :: Comment
+    , issueCommentEventRepository :: Repository
+    , issueCommentEventSender :: User
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON IssueCommentEvent where
+    parseJSON (Object o) = IssueCommentEvent
+        <$> o .: "action"
+        <*> o .: "issue"
+        <*> o .: "comment"
+        <*> o .: "repository"
+        <*> o .: "sender"
+    parseJSON _ = fail "IssueCommentEvent must be an object"
+
+data IssueEvent = IssueEvent
+    { issueEventAction :: Text
+    , issueEventIssue :: IssueData
+    , issueEventRepository :: Repository
+    , issueEventSender :: User
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON IssueEvent where
+    parseJSON (Object o) = IssueEvent
+        <$> o .: "action"
+        <*> o .: "issue"
+        <*> o .: "repository"
+        <*> o .: "sender"
+    parseJSON _ = fail "IssueEvent must be an object"
+
+data IssueData = IssueData
+    { issueUrl :: Url
+    , issueLabelsUrl :: Url
+    , issueCommentsUrl :: Url
+    , issueEventsUrl :: Url
+    , issueHtmlUrl :: Url
+    , issueId :: Int
+    , issueNumber :: Int
+    , issueTitle :: Text
+    , issueUser :: User
+    -- TODO: issueLabels
+    , issueState :: Text
+    , issueLocked :: Bool
+    -- TODO: issueAssignee
+    -- TODO: issueMilestone
+    , issueNumComments :: Int
+    , issueCreatedAt :: DateString -- TODO: Change to date type
+    , issueUpdatedAt :: DateString -- TODO: Change to date type
+    , issueClosedAt :: Maybe DateString -- TODO: Change to date type
+    , issueBody :: Text
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON IssueData where
+    parseJSON (Object o) = IssueData
+        <$> o .: "url"
+        <*> o .: "labels_url"
+        <*> o .: "comments_url"
+        <*> o .: "events_url"
+        <*> o .: "html_url"
+        <*> o .: "id"
+        <*> o .: "number"
+        <*> o .: "title"
+        <*> o .: "user"
+        -- TODO: <*> o .: "labels"
+        <*> o .: "state"
+        <*> o .: "locked"
+        -- TODO: <*> o .:? "assignee"
+        -- TODO: <*> o .:? "milestone"
+        <*> o .: "comments"
+        <*> o .: "created_at"
+        <*> o .: "updated_at"
+        <*> o .:? "closed_at"
+        <*> o .: "body"
+    parseJSON _ = fail "Issue must be an object"
+
+data Comment = Comment
+    { commentUrl :: Url
+    , commentHtmlUrl :: Url
+    , commentId :: Int
+    , commentBody :: Text
+    , commentUser :: User
+    , commentCreatedAt :: Text
+    , commentUpdatedAt :: Text
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON Comment where
+    parseJSON (Object o) = Comment
+        <$> o .: "url"
+        <*> o .: "html_url"
+        <*> o .: "id"
+        <*> o .: "body"
+        <*> o .: "user"
+        <*> o .: "created_at"
+        <*> o .: "updated_at"
+    parseJSON _ = fail "Comment must be an object"
 
 data PushEvent = PushEvent
     { pushEventRef :: Text
@@ -190,7 +296,7 @@ data Repository = Repository
     , repoSize :: Int
     , repoStargazersCount :: Int
     , repoWatchersCount :: Int
-    , repoLanguage :: Text
+    , repoLanguage :: Maybe Text
     , repoHasIssues :: Bool
     , repoHasDownloads :: Bool
     , repoHasWiki :: Bool
@@ -262,7 +368,7 @@ instance FromJSON Repository where
         <*> o .: "size"
         <*> o .: "stargazers_count"
         <*> o .: "watchers_count"
-        <*> o .: "language"
+        <*> o .:? "language"
         <*> o .: "has_issues"
         <*> o .: "has_downloads"
         <*> o .: "has_wiki"
@@ -279,7 +385,7 @@ instance FromJSON Repository where
 
 data User = User
     { userLogin :: Text
-    , userId :: Int
+    , userId :: Maybe Int
     , userAvatarUrl :: Url
     , userGravatarId :: Text
     , userUrl :: Url
@@ -300,7 +406,7 @@ data User = User
 instance FromJSON User where
     parseJSON (Object o) = User
         <$> o .: "login"
-        <*> o .: "id"
+        <*> o .:? "id"
         <*> o .: "avatar_url"
         <*> o .: "gravatar_id"
         <*> o .: "url"
