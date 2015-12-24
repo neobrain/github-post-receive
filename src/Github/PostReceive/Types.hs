@@ -4,6 +4,7 @@
 module Github.PostReceive.Types
     ( Payload (..)
     , IssueEvent (..)
+    , PullRequestEvent (..)
     , IssueCommentEvent (..)
     , PushEvent (..)
     , StatusEvent (..)
@@ -18,6 +19,8 @@ module Github.PostReceive.Types
     , Tree (..)
     , Comment (..)
     , IssueData (..)
+    , PullRequestData (..)
+    , PullRequestCommit (..)
     , Url
     , HashValue
     , DateString
@@ -40,6 +43,7 @@ data Payload = Push PushEvent
              | Status StatusEvent
              | IssueComment IssueCommentEvent
              | Issue IssueEvent
+             | PullRequest PullRequestEvent
              deriving (Show, Eq, Typeable)
 
 instance FromJSON Payload where
@@ -47,6 +51,7 @@ instance FromJSON Payload where
               <|> Status <$> parseJSON v
               <|> IssueComment <$> parseJSON v -- NOTE: The only way to tell apart "IssueComment" from "Issue" is to have this in front, currently...
               <|> Issue <$> parseJSON v
+              <|> PullRequest <$> parseJSON v
 
 data IssueCommentEvent = IssueCommentEvent
     { issueCommentEventAction :: Text
@@ -79,6 +84,99 @@ instance FromJSON IssueEvent where
         <*> o .: "repository"
         <*> o .: "sender"
     parseJSON _ = fail "IssueEvent must be an object"
+
+data PullRequestEvent = PullRequestEvent
+    { pullRequestEventAction :: Text
+    , pullRequestEventNumber :: Int
+    , pullRequestEventData :: PullRequestData
+    , pullRequestEventRepository :: Repository
+    , pullRequestEventSender :: User
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON PullRequestEvent where
+    parseJSON (Object o) = PullRequestEvent
+        <$> o .: "action"
+        <*> o .: "number"
+        <*> o .: "pull_request"
+        <*> o .: "repository"
+        <*> o .: "sender"
+    parseJSON _ = fail "PullRequestEvent must be an object"
+
+data PullRequestData = PullRequestData
+    { pullRequestUrl :: Url
+    , pullRequestHtmlUrl :: Url
+    , pullRequestDiffUrl :: Url
+    , pullRequestPatchUrl :: Url
+    , pullRequestIssueUrl :: Url
+    , pullRequestId :: Int
+    , pullRequestNumber :: Int
+    , pullRequestTitle :: Text
+    , pullRequestUser :: User
+    , pullRequestState :: Text
+    , pullRequestLocked :: Bool
+    -- TODO: pullRequestAssignee
+    -- TODO: pullRequestMilestone
+    , pullRequestNumComments :: Int
+    , pullRequestNumReviewComments :: Int
+    , pullRequestNumCommits :: Int
+    , pullRequestNumAdditions :: Int
+    , pullRequestNumDeletions :: Int
+    , pullRequestNumChangedFiles :: Int
+    , pullRequestCreatedAt :: DateString -- TODO: Change to date type
+    , pullRequestUpdatedAt :: DateString -- TODO: Change to date type
+    , pullRequestClosedAt :: Maybe DateString -- TODO: Change to date type
+    , pullRequestMergedAt :: Maybe DateString -- TODO: Change to date type
+    , pullRequestBody :: Text
+    , pullRequestBase :: PullRequestCommit
+    , pullRequestHead :: PullRequestCommit
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON PullRequestData where
+    parseJSON (Object o) = PullRequestData
+        <$> o .: "url"
+        <*> o .: "html_url"
+        <*> o .: "diff_url"
+        <*> o .: "patch_url"
+        <*> o .: "issue_url"
+        <*> o .: "id"
+        <*> o .: "number"
+        <*> o .: "title"
+        <*> o .: "user"
+        <*> o .: "state"
+        <*> o .: "locked"
+        -- TODO: <*> o .:? "assignee"
+        -- TODO: <*> o .:? "milestone"
+        <*> o .: "comments"
+        <*> o .: "review_comments"
+        <*> o .: "commits"
+        <*> o .: "additions"
+        <*> o .: "deletions"
+        <*> o .: "changed_files"
+        <*> o .: "created_at"
+        <*> o .: "updated_at"
+        <*> o .:? "closed_at"
+        <*> o .:? "merged_at"
+        <*> o .: "body"
+        <*> o .: "base"
+        <*> o .: "head"
+    parseJSON _ = fail "PullRequestData must be an object"
+
+data PullRequestCommit = PullRequestCommit
+    { pullRequestCommitLabel :: Text
+    , pullRequestCommitRef :: Text
+    , pullRequestCommitSha :: HashValue
+    , pullRequestCommitUser :: User
+    , pullRequestCommitRepo :: Repository
+    } deriving (Show, Eq, Typeable)
+
+instance FromJSON PullRequestCommit where
+    parseJSON (Object o) = PullRequestCommit
+        <$> o .: "label"
+        <*> o .: "ref"
+        <*> o .: "sha"
+        <*> o .: "user"
+        <*> o .: "repo"
+    parseJSON _ = fail "PullRequestCommit must be an object"
 
 data IssueData = IssueData
     { issueUrl :: Url
@@ -123,7 +221,7 @@ instance FromJSON IssueData where
         <*> o .: "updated_at"
         <*> o .:? "closed_at"
         <*> o .: "body"
-    parseJSON _ = fail "Issue must be an object"
+    parseJSON _ = fail "IssueData must be an object"
 
 data Comment = Comment
     { commentUrl :: Url
